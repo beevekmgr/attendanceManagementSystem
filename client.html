@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html style="height: 100%">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1.0" />
+    <title>Attendance system</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css"
+    />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pouchdb/6.2.0/pouchdb.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.6.0/Chart.min.js"></script>
+  </head>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    table {
+      width: 90%;
+    }
+    table > thead > tr > th > i > p {
+      display: inline;
+
+      margin-left: 10px;
+      font-weight: 900;
+    }
+    table > thead > tr > th > i {
+      display: inline;
+    }
+    #time_list > nav {
+      display: flex;
+      justify-content: space-between;
+      height: 8vh;
+    }
+    #time_list {
+      height: 100vh;
+    }
+  </style>
+  <body>
+    <div class="ui grid">
+      <div class="two wide column">
+        <div
+          class="ui left demo vertical inverted sidebar visible labeled icon menu"
+        >
+          <a class="item" href="#attendance_list">
+            <i class="spinner loading icon"></i>
+            Live log
+          </a>
+          <a class="item" href="#individual_list">
+            <i class="user secret icon"></i>
+            User log
+          </a>
+          <a class="item" href="#time_list">
+            <i class="calendar alternate outline icon"></i>
+            Time log
+          </a>
+        </div>
+      </div>
+      <div class="fourteen wide column">
+        <section id="attendance_list">
+          <h1>Daily Log</h1>
+          <table class="ui celled table" id="table" width="60%">
+            <thead>
+              <tr>
+                <th>
+                  <i class="id badge outline icon"></i>
+                  <p>ID</p>
+                </th>
+                <th>
+                  <i class="user circle icon"></i>
+                  <p>Name</p>
+                </th>
+                <th>
+                  <i class="address card icon"></i>
+                  <p>Entry</p>
+                </th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <section id="individual_list">
+          <h1>Individual Log</h1>
+          <table class="ui celled table" id="table1" width="60%">
+            <thead>
+              <tr>
+                <th>
+                  <i class="id badge outline icon"></i>
+                  <p>ID</p>
+                </th>
+                <th>
+                  <i class="user circle icon"></i>
+                  <p>Name</p>
+                </th>
+                <th>
+                  <i class="address card icon"></i>
+                  <p>Details</p>
+                </th>
+                <th>
+                  <i class="address card icon"></i>
+                  <p>Presence</p>
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </section>
+        <section id="time_list">
+          <nav>
+            <h1>Time Log</h1>
+
+            <div class="ui teal buttons">
+              <div class="ui button">Filter by</div>
+              <div class="ui floating dropdown icon button">
+                <i class="dropdown icon"></i>
+                <div class="menu" id="dropDown">
+                  <div class="item"><i class="edit icon"></i>Daily</div>
+                  <div class="item"><i class="delete icon"></i>Weekly</div>
+                  <div class="item"><i class="hide icon"></i>Monthly</div>
+                  <div class="item"><i class="hide icon"></i>Yearly</div>
+                </div>
+              </div>
+            </div>
+          </nav>
+          <table class="ui celled table" id="timeTable">
+            <thead>
+              <tr>
+                <th>
+                  <i class="id badge outline icon"></i>
+                  <p>ID</p>
+                </th>
+                <th>
+                  <i class="user circle icon"></i>
+                  <p>Name</p>
+                </th>
+                <th>
+                  <i class="address card icon"></i>
+                  <p>Entry</p>
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </section>
+      </div>
+    </div>
+    <div class="ui modal">
+      <div class="header">Date List</div>
+      <div class="scrolling content">
+        <table class="ui celled table" id="table2" width="60%">
+          <thead>
+            <tr></tr>
+          </thead>
+        </table>
+      </div>
+    </div>
+
+    <script charset="utf-8">
+      // Initialize PouchDB with remote instance
+      var userDB = new PouchDB('http://localhost:5984/user');
+      var attendanceDB = new PouchDB('http://localhost:5984/attendance');
+      var presentUsers = [];
+
+      // Initialize first table
+      var table = document.getElementById('table');
+      var user = new Object();
+
+      var updateUser = function() {
+        userDB.allDocs(
+          {
+            include_docs: true,
+            descending: true
+            // limit: 200
+          },
+          updateUserRecord
+        );
+      };
+
+      var updateUserRecord = function(err, result) {
+        if (result.rows.length > 0) {
+          for (var key in result.rows) {
+            var item = result.rows[key];
+            var doc = item.doc;
+            var index = doc['_id'];
+            var value = doc['name'];
+            user[index] = value;
+          }
+        }
+      };
+
+      // Change handler
+      var changes = userDB
+        .changes({
+          live: true,
+          since: 'now'
+        })
+        .on('change', function(change) {
+          updateUser();
+          updateDocs();
+        });
+
+      // Change handler
+      var changes = attendanceDB
+        .changes({
+          live: true,
+          since: 'now'
+        })
+        .on('change', function(change) {
+          updateDocs();
+        });
+
+      // Handler for updating the table
+      var updateDocs = function() {
+        attendanceDB.allDocs(
+          {
+            include_docs: true,
+            descending: true
+            // limit: 200
+          },
+          updateChart
+        );
+      };
+      var users = [];
+      // Build chart data
+      var updateChart = function(err, result) {
+        if (result.rows.length > 0) {
+          $('#table tbody tr').remove();
+          for (var key in result.rows) {
+            var item = result.rows[key];
+            var doc = item.doc;
+            var id = doc['_id'];
+            var date = new Date(id);
+            var index = doc['index'];
+
+            if (!id.startsWith('_design/')) {
+              var tr = document.createElement('tr');
+
+              var td1 = document.createElement('td');
+              var td = document.createElement('td');
+              var td2 = document.createElement('td');
+
+              var userName = user[index];
+              if (!userName) {
+                userName = index;
+              }
+
+              users.push({ id: index, name: userName, date: date });
+
+              td1.appendChild(document.createTextNode(index));
+              td.appendChild(document.createTextNode(userName));
+              td2.appendChild(document.createTextNode(date));
+
+              tr.appendChild(td1);
+              tr.appendChild(td);
+              tr.appendChild(td2);
+
+              $('#table tbody').append(tr);
+            }
+          }
+        }
+
+        callAfterUserAdded();
+        displayUser();
+      };
+      //Another Table
+      function displayUser() {
+        users.sort(function(a, b) {
+          return a.id - b.id;
+        });
+        users.reverse();
+
+        for (var i = users.length; i >= 0; i--) {
+          if (user[i] != undefined) {
+            addUser(i, user[i]);
+          }
+        }
+      }
+      // For Individual list
+      function callAfterUserAdded() {
+        const startOfDay = moment()
+          .add(0, 'day')
+          .startOf('day');
+        users.forEach(user => {
+          if (user.date > startOfDay) {
+            presentUsers.push(Number(user.id));
+          }
+        });
+      }
+
+      function addUser(id, name) {
+        var table1 = document.getElementById('table1');
+        var row = table1.insertRow(1);
+        var cell1 = row.insertCell(0);
+        var cell2 = row.insertCell(1);
+        var cell3 = row.insertCell(2);
+        var cell4 = row.insertCell(3);
+
+        cell1.innerHTML = id;
+        cell2.innerHTML = name;
+        cell3.innerHTML = `<button class='ui inverted green button' id='${id}'>View Details</button>`;
+        if (presentUsers.includes(id)) {
+          cell4.innerHTML = '<button class="ui green button">Present</button>';
+        } else {
+          cell4.innerHTML = '<button class="ui red button">Absent</button>';
+        }
+      }
+
+      // Initial update after loading the page
+      updateUser();
+      updateDocs();
+
+      document
+        .getElementById('table1')
+        .addEventListener('click', function(event) {
+          var table2 = document.getElementById('table2');
+          while (table2.hasChildNodes()) {
+            table2.removeChild(table2.firstChild);
+          }
+
+          users.map(user => {
+            if (user.id == event.target.id) {
+              $('.ui.modal').modal('show');
+              var table2 = document.getElementById('table2');
+              var row = table2.insertRow(0);
+              var cell1 = row.insertCell(0);
+              cell1.innerHTML = user.date;
+            }
+          });
+        });
+      //Drop down bootstrap query
+      $('.dropdown').dropdown({
+        transition: 'drop'
+      });
+
+      //For Time Log
+      document
+        .querySelector('#dropDown')
+        .addEventListener('click', function(event) {
+          let timeTable = document.getElementById('timeTable');
+          while (timeTable.hasChildNodes()) {
+            timeTable.removeChild(timeTable.firstChild);
+          }
+          const now = new Date();
+          let selection = event.target.textContent;
+          let selectionText =
+            event.target.parentNode.parentNode.parentNode.children[0];
+          if (selection == 'Weekly') {
+            selectionText.textContent = 'Weekly';
+            var time7daysAgo = moment()
+              .subtract(7, 'days')
+              .startOf('day');
+            users.reverse().map(user => {
+              if (user.date > time7daysAgo._d) {
+                addTimeUser(user.id, user.name, user.date);
+              }
+            });
+          } else if (selection == 'Daily') {
+            selectionText.textContent = 'Daily';
+            const startOfDay = moment()
+              .add(0, 'day')
+              .startOf('day');
+            var newArr = users.map(user => {
+              if (user.date > startOfDay) {
+                addTimeUser(user.id, user.name, user.date);
+                presentUsers.push(user.id);
+              }
+            });
+          } else if (selection == 'Monthly') {
+            selectionText.textContent = 'Monthly';
+            const startOfMonth = moment()
+              .add(0, 'day')
+              .startOf('month');
+            const endOfMonth = moment()
+              .add(0, 'day')
+              .endOf('month');
+            users.map(user => {
+              if (user.date > startOfMonth._d && user.date < endOfMonth._d) {
+                addTimeUser(user.id, user.name, user.date);
+              }
+            });
+          } else if (selection == 'Yearly') {
+            while (timeTable.hasChildNodes()) {
+              timeTable.removeChild(timeTable.firstChild);
+            } //Clearing table;
+            selectionText.textContent = 'Yearly';
+            users.reverse().map(user => {
+              addTimeUser(user.id, user.name, user.date);
+            });
+          }
+        });
+      function addTimeUser(id, name, date) {
+        var timeTable = document.getElementById('timeTable');
+
+        var row = timeTable.insertRow(0);
+        var cell1 = row.insertCell(0);
+        var cell2 = row.insertCell(1);
+        var cell3 = row.insertCell(2);
+
+        cell1.innerHTML = id;
+        cell2.innerHTML = name;
+        cell3.innerHTML = date;
+      }
+    </script>
+  </body>
+</html>
